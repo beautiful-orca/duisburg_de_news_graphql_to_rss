@@ -15,4 +15,10 @@ Category config extracted from `data-sp-central-search-app` on each page's sourc
   umwelt:           { groups: ['8678'], categories: ['1912', '2027'] },
 ```
 
+All news are found at (but is not implemented):
+```
+  news:           { groups: ['8678'], categories: ['1912', '2028'] },
+```
+
+
 The `node.js` project is the server that does the heavy lifting, fetching, converting and outputting the feed via http. It acts as an adapter / sidecar for my FreshRSS instance in my docker-compose stack. `compose.yaml` is an incomplete example. 
