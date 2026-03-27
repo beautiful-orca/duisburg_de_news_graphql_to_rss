@@ -3,7 +3,10 @@ Queries the GraphQL Endpoint of duisburg.de and makes the articles available as 
 
 ### This is created with the help of Claude AI
 
-Get the [News of City of Duisburg](https://www.duisburg.de/news/aktuelle_news) as an RSS feed. Articles get loaded dynamicly with GraphQL [https://www.duisburg.de/api/graphql/](https://www.duisburg.de/api/graphql/). I wanted News-Feeds from the [sub-categories](https://www.duisburg.de/news/aktuelle_news#hier-finden-sie-die-news-sortiert-nach-kategorien), which are identified by groups and categories. They can be manually added to the `server.js` to make other feeds work, which did not interest me when creating.
+Get the [News of City of Duisburg](https://www.duisburg.de/news/aktuelle_news) as an RSS feed. Articles get loaded dynamicly with GraphQL [https://www.duisburg.de/api/graphql/](https://www.duisburg.de/api/graphql/). I wanted News-Feeds from the [sub-categories](https://www.duisburg.de/news/aktuelle_news#hier-finden-sie-die-news-sortiert-nach-kategorien), which are identified by groups and categories. They can be manually added to the `server.js` to make other feeds work, which did not interest me when creating.  
+
+Category config extracted from `data-sp-central-search-app` on each page's source (`CMD + U`).  
+`groups` is always `["8678"]`, only the second category ID differs in my case.
 
 ```
   stadtentwicklung: { groups: ['8678'], categories: ['1912', '2030'] },
