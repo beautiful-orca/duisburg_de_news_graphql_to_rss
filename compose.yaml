@@ -1,0 +1,69 @@
+# Place server.js in ./duisburg-rss/server.js
+# In FreshRSS, add these as Atom feeds (if you use the tailscale stack withnetwork_mode: service:freshrss-ts, otherwise http://duisburg-rss:3456):
+#   http://localhost:3456/feed?category=stadtentwicklung
+#   http://localhost:3456/feed?category=stadtverwaltung
+#   http://localhost:3456/feed?category=verkehr
+#   http://localhost:3456/feed?category=umwelt
+
+services:
+  freshrss:
+    image: freshrss/freshrss:latest
+    container_name: freshrss
+    restart: unless-stopped
+    volumes:
+      - ./data:/var/www/FreshRSS/data
+      - ./extensions:/var/www/FreshRSS/extensions
+    depends_on:
+      freshrss-ts:
+        condition: service_healthy
+    network_mode: service:freshrss-ts
+    env_file: ./.env
+    environment:
+      TZ: Europe/Berlin
+      CRON_MIN: '*/15'
+      TRUSTED_PROXY: 127.0.0.1
+      FRESHRSS_INSTALL: |-
+        --api-enabled
+        --base-url ${BASE_URL}
+        --default-user admin
+      FRESHRSS_USER: |-
+        --api-password ${ADMIN_API_PASSWORD}
+        --email ${ADMIN_EMAIL}
+        --password ${ADMIN_PASSWORD}
+        --user admin
+
+  duisburg-rss:
+    image: node:alpine
+    container_name: duisburg-rss
+    restart: unless-stopped
+    volumes:
+      - ./duisburg-rss:/app
+    working_dir: /app
+    command: node server.js
+    network_mode: service:freshrss-ts
+
+# more info on Tailscale: https://tailscale.com/blog/docker-tailscale-guide
+  freshrss-ts:
+    container_name: freshrss-ts
+    image: tailscale/tailscale:latest
+    healthcheck:
+      test: tailscale status --peers=false --json | grep 'Online.*true'
+      start_period: 3s
+      interval: 1s
+      retries: 3
+    restart: unless-stopped
+    init: true
+    environment:
+      - TS_HOSTNAME=rss
+      - TS_AUTH_KEY=tskey-auth-xxx
+      - TS_EXTRA_ARGS=--advertise-tags=tag:container --accept-dns=true
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_SERVE_CONFIG=/config/rss.json
+    volumes:
+      - ./tailscale/state:/var/lib/tailscale
+      - ./tailscale/config:/config
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - net_admin
+      - sys_module
