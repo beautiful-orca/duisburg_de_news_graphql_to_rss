@@ -33,13 +33,13 @@ services:
         --user admin
 
   duisburg-rss:
-    image: node:alpine
+    image: php:cli-alpine
     container_name: duisburg-rss
     restart: unless-stopped
     volumes:
       - ./duisburg-rss:/app
     working_dir: /app
-    command: node server.js
+    command: php -S 0.0.0.0:3456 server.php
     network_mode: service:freshrss-ts
 
 # more info on Tailscale: https://tailscale.com/blog/docker-tailscale-guide
