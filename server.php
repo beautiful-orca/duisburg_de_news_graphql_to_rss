@@ -65,7 +65,6 @@ function fetchGraphQL(array $config): array {
 
     $response = curl_exec($ch);
     $error    = curl_error($ch);
-    curl_close($ch);
 
     if ($error) {
         throw new RuntimeException('cURL error: ' . $error);
