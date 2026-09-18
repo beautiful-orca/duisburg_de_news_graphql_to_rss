@@ -168,7 +168,7 @@ function processParagraph(DOMXPath $xpath, DOMNode $p): string {
             if ($text !== '') {
                 $result .= sprintf(
                     '<a href="%s">%s</a> ',
-                    cleanHref($href),
+                    htmlspecialchars(cleanHref($href), ENT_XML1),
                     cleanText($text)
                 );
                 $hasContent = true;
@@ -450,13 +450,38 @@ function sendFeed(string $atom, int $mtime): void {
 }
 
 // --- Main ---
+
+// Never let raw PHP errors/warnings leak into what's supposed to be the XML
+// body — that's what turns into "could not parse document" with an empty
+// or truncated feed in the reader. Buffer output so we can discard anything
+// accidentally printed before we've decided what the real response is.
+ini_set('display_errors', '0');
+ob_start();
+
+function sendPlainTextError(int $status, string $message): void {
+    // Discard anything already buffered (stray warnings, partial output, etc.)
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    http_response_code($status);
+    header('Content-Type: text/plain; charset=utf-8');
+    echo $message;
+}
+
+// Catch fatal errors (out-of-memory, uncaught TypeError, etc.) that bypass
+// normal exception handling entirely.
+register_shutdown_function(function () {
+    $error = error_get_last();
+    if ($error !== null && in_array($error['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR], true)) {
+        sendPlainTextError(500, 'Internal error: ' . $error['message']);
+    }
+});
+
 $category = strtolower($_GET['category'] ?? '');
 
 if (!$category || !isset(CATEGORY_CONFIG[$category])) {
-    http_response_code(400);
-    header('Content-Type: text/plain');
     $available = implode(', ', array_keys(CATEGORY_CONFIG));
-    echo "Unknown category. Available: {$available}";
+    sendPlainTextError(400, "Unknown category. Available: {$available}");
     exit;
 }
 
@@ -468,6 +493,7 @@ try {
     if (!$noCache) {
         $feedCached = cacheGetWithAge($feedKey, CACHE_TTL_FEED);
         if ($feedCached !== null) {
+            ob_end_clean();
             sendFeed($feedCached['value']['atom'], $feedCached['mtime']);
             exit;
         }
@@ -494,12 +520,25 @@ try {
     $articleContentByUrl = fetchArticlesContent($urls, $noCache);
 
     $atom = toAtom($category, $results, $articleContentByUrl);
+
+    // Sanity-check the XML we just built before caching/serving it, so a
+    // parsing bug surfaces as a clear 500 instead of a broken feed download.
+    $checkDom = new DOMDocument();
+    libxml_use_internal_errors(true);
+    $isValid = $checkDom->loadXML($atom);
+    $xmlErrors = libxml_get_errors();
+    libxml_clear_errors();
+
+    if (!$isValid) {
+        $firstError = $xmlErrors[0]->message ?? 'unknown XML error';
+        throw new RuntimeException('Generated feed is not valid XML: ' . trim($firstError));
+    }
+
     cacheSet($feedKey, ['atom' => $atom]);
     cacheCleanup(max(CACHE_TTL_FEED, CACHE_TTL_SEARCH, CACHE_TTL_ARTICLE) * 3);
 
+    ob_end_clean();
     sendFeed($atom, time());
-} catch (RuntimeException $e) {
-    http_response_code(500);
-    header('Content-Type: text/plain');
-    echo 'Error: ' . $e->getMessage();
+} catch (Throwable $e) {
+    sendPlainTextError(500, 'Error: ' . $e->getMessage());
 }
