@@ -98,8 +98,8 @@ The project uses a **file-based cache** in the system temp directory (`/tmp/duis
 
 | Cache Type | TTL        | Purpose                       |
 | ---------- | ---------- | ----------------------------- |
-| Feed       | 60 minutes | Fully assembled Atom XML feed |
-| Search     | 60 minutes | Raw GraphQL search results    |
+| Feed       | 55 minutes | Fully assembled Atom XML feed |
+| Search     | 55 minutes | Raw GraphQL search results    |
 | Article    | 24 hours   | Individual article bodies     |
 
 
