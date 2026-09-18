@@ -7,10 +7,31 @@ const BASE_URL = 'https://www.duisburg.de';
 const GRAPHQL_URL = BASE_URL . '/api/graphql/';
 
 const CATEGORY_CONFIG = [
-    'stadtentwicklung' => ['groups' => ['8678'], 'categories' => ['1912', '2030']],
-    'stadtverwaltung'  => ['groups' => ['8678'], 'categories' => ['1912', '2032']],
-    'verkehr'          => ['groups' => ['8678'], 'categories' => ['1912', '2041']],
-    'umwelt'           => ['groups' => ['8678'], 'categories' => ['1912', '2027']],
+    'alle_news'                => ['groups' => ['8678'], 'categories' => ['1912', '2028']],
+    'besondere_ereignisse'      => ['groups' => ['8678'], 'categories' => ['1912', '2034']],
+    'bezirk_hamborn'           => ['groups' => ['8697'], 'categories' => ['1912', '2043']],
+    'bezirk_homberg_ruhrort_baerl' => ['groups' => ['8678'], 'categories' => ['1912', '2045']],
+    'bezirk_meiderich_beeck'   => ['groups' => ['8678'], 'categories' => ['1912', '2042']],
+    'bezirk_mitte'             => ['groups' => ['8678'], 'categories' => ['1912', '2048']],
+    'bezirk_rheinhausen'       => ['groups' => ['8678'], 'categories' => ['1912', '2046']],
+    'bezirk_sued'              => ['groups' => ['8678'], 'categories' => ['1912', '2047']],
+    'bezirk_walsum'            => ['groups' => ['8678'], 'categories' => ['1912', '2044']],
+    'digitalisierung'          => ['groups' => ['8678'], 'categories' => ['1912', '2033']],
+    'feuerwehr'                => ['groups' => ['8678'], 'categories' => ['1912', '2040']],
+    'interkulturelles'         => ['groups' => ['8678'], 'categories' => ['1912', '2025']],
+    'kinder_familien_senioren' => ['groups' => ['8678'], 'categories' => ['1912', '2039']],
+    'kultur'                   => ['groups' => ['8678'], 'categories' => ['1912', '2026']],
+    'soziales'                 => ['groups' => ['8678'], 'categories' => ['1912', '2024']],
+    'sport'                    => ['groups' => ['8678'], 'categories' => ['1912', '2036']],
+    'stadtbibliothek'          => ['groups' => ['8678'], 'categories' => ['1912', '2031']],
+    'stadtentwicklung'         => ['groups' => ['8678'], 'categories' => ['1912', '2030']],
+    'stadtverwaltung'          => ['groups' => ['8678'], 'categories' => ['1912', '2032']],
+    'tourismus'                => ['groups' => ['8678'], 'categories' => ['1912', '2029']],
+    'umwelt'                   => ['groups' => ['8678'], 'categories' => ['1912', '2027']],
+    'veranstaltungen'          => ['groups' => ['8678'], 'categories' => ['1912', '2038']],
+    'verkehr'                  => ['groups' => ['8678'], 'categories' => ['1912', '2041']],
+    'vhs'                      => ['groups' => ['8678'], 'categories' => ['1912', '2037']],
+    'wirtschaft'               => ['groups' => ['8678'], 'categories' => ['1912', '2035']],
 ];
 
 const GQL_QUERY = 'query Search($searchInput: SearchInput!) {
