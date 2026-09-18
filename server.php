@@ -1,7 +1,6 @@
 <?php
 // Duisburg Kategorie → Atom Feed Adapter
 // Usage: GET /server.php?category=stadtentwicklung
-// Deploy anywhere PHP is available (e.g. php -S 0.0.0.0:3456)
 
 const BASE_URL = 'https://www.duisburg.de';
 const GRAPHQL_URL = BASE_URL . '/api/graphql/';
@@ -29,6 +28,56 @@ const GQL_QUERY = 'query Search($searchInput: SearchInput!) {
     }
   }
 }';
+
+function cleanText(string $text): string {
+    // Fix common encoding issues (fallback for UTF-8 misinterpretation)
+    $text = str_replace(
+        ['Ã¤', 'Ã¶', 'Ã¼', 'Ã', 'Ã©', 'Ã¨', 'Ã', 'lÃ¤', 'lÃ¶', 'lÃ¼', 'LÃ¤', 'LÃ¶', 'LÃ¼', 'Ã¶', 'Ã¼', 'Ã¤'],
+        ['ä', 'ö', 'ü', 'Á', 'é', 'è', 'À', 'lä', 'lö', 'lü', 'Lä', 'Lö', 'Lü', 'ö', 'ü', 'ä'],
+        $text
+    );
+    return htmlspecialchars($text, ENT_XML1);
+}
+
+function cleanHref(string $href): string {
+    // Decode URL-encoded characters and fix obfuscated emails
+    $href = urldecode($href);
+    $href = preg_replace('/%E2%9A%B9/', '@', $href);
+    $href = preg_replace('/%E2%97%A6/', '.', $href);
+    return $href;
+}
+
+function processParagraph(DOMNode $p): string {
+    $dom = $p->ownerDocument;
+    $xpath = new DOMXPath($dom);
+    $result = '';
+    $hasContent = false;
+
+    // Extract ALL text nodes and links within this paragraph (recursively)
+    $nodes = $xpath->query('.//text()[normalize-space()] | .//a', $p);
+    foreach ($nodes as $node) {
+        if ($node->nodeType === XML_TEXT_NODE) {
+            $text = trim($node->nodeValue);
+            if (!empty($text)) {
+                $result .= cleanText($text) . ' ';
+                $hasContent = true;
+            }
+        } elseif ($node->nodeName === 'a') {
+            $href = $node->getAttribute('href');
+            $text = trim($node->nodeValue);
+            if (!empty($text)) {
+                $result .= sprintf(
+                    '<a href="%s">%s</a> ',
+                    cleanHref($href),
+                    cleanText($text)
+                );
+                $hasContent = true;
+            }
+        }
+    }
+
+    return $hasContent ? "<p>" . trim($result) . "</p>" : '';
+}
 
 function fetchGraphQL(array $config): array {
     $payload = json_encode([
@@ -64,7 +113,7 @@ function fetchGraphQL(array $config): array {
     ]);
 
     $response = curl_exec($ch);
-    $error    = curl_error($ch);
+    $error = curl_error($ch);
 
     if ($error) {
         throw new RuntimeException('cURL error: ' . $error);
@@ -78,10 +127,67 @@ function fetchGraphQL(array $config): array {
     return $data['data']['search']['results'] ?? [];
 }
 
+function fetchArticleContent(string $url): string {
+    $ch = curl_init($url);
+    curl_setopt_array($ch, [
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_HTTPHEADER     => [
+            'User-Agent: Mozilla/5.0 (compatible; FreshRSS-Adapter/1.0)',
+        ],
+        CURLOPT_TIMEOUT => 10,
+    ]);
+
+    $html = curl_exec($ch);
+    $error = curl_error($ch);
+
+    if ($error) {
+        throw new RuntimeException("Failed to fetch article: $error");
+    }
+
+    // Ensure UTF-8 encoding
+    $html = mb_convert_encoding($html, 'UTF-8', mb_detect_encoding($html, 'UTF-8, ISO-8859-1', true));
+
+    $dom = new DOMDocument();
+    @$dom->loadHTML($html, LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD);
+    $xpath = new DOMXPath($dom);
+
+    $content = '';
+
+    // Extract all paragraphs from the article body
+    $paragraphs = $xpath->query('//div[contains(@class, "SP-Content__body")]//p | //article[contains(@class, "SP-Content")]//p');
+    foreach ($paragraphs as $p) {
+        // Skip paragraphs that only contain dates (e.g., "21. Januar 2026")
+        $text = trim($p->nodeValue);
+        if (preg_match('/^\d{1,2}\.\s\w+\s\d{4}$/u', $text)) {
+            continue;
+        }
+        $content .= processParagraph($p);
+    }
+
+    // Extract link list items from SP-LinkList__item
+    $linkItems = $xpath->query('//div[contains(@class, "SP-LinkList__item")]');
+    foreach ($linkItems as $item) {
+        $link = $item->getElementsByTagName('a')->item(0);
+        if ($link) {
+            $href = cleanHref($link->getAttribute('href'));
+            $textNode = $xpath->query('.//span[contains(@class, "SP-Link__text")]', $item)->item(0);
+            $text = $textNode ? trim($textNode->nodeValue) : 'Link';
+            $content .= sprintf(
+                '<p><a href="%s">%s</a></p>',
+                htmlspecialchars($href, ENT_XML1),
+                cleanText($text)
+            );
+        }
+    }
+
+    return trim($content);
+}
+
 function toAtom(string $category, array $results): string {
-    $now      = date('c');
-    $feedUrl  = BASE_URL . '/news/news-kategorieseiten/' . $category;
-    $label    = ucfirst($category);
+    $now = date('c');
+    $feedUrl = BASE_URL . '/news/news-kategorieseiten/' . $category;
+    $label = ucfirst($category);
 
     $entries = '';
     foreach ($results as $r) {
@@ -94,35 +200,40 @@ function toAtom(string $category, array $results): string {
                 : BASE_URL . $t['link']['url'])
             : $feedUrl;
 
-        $date    = isset($t['date']) ? date('c', strtotime($t['date'])) : $now;
-        $summary = htmlspecialchars($t['text'] ?? '', ENT_XML1);
-        $title   = htmlspecialchars($t['headline'], ENT_XML1);
-        $urlXml  = htmlspecialchars($url, ENT_XML1);
+        $date = isset($t['date']) ? date('c', strtotime($t['date'])) : $now;
+        $title = htmlspecialchars($t['headline'], ENT_XML1);
+        $urlXml = htmlspecialchars($url, ENT_XML1);
+
+        try {
+            $articleContent = fetchArticleContent($url);
+            $summary = $articleContent;
+        } catch (RuntimeException $e) {
+            $summary = htmlspecialchars($t['text'] ?? '', ENT_XML1);
+        }
 
         $entries .= "  <entry>\n"
             . "    <id>{$urlXml}</id>\n"
             . "    <title>{$title}</title>\n"
             . "    <link href=\"{$urlXml}\"/>\n"
             . "    <updated>{$date}</updated>\n"
-            . "    <summary>{$summary}</summary>\n"
+            . "    <content type=\"xhtml\"><div xmlns=\"http://www.w3.org/1999/xhtml\">{$summary}</div></content>\n"
             . "  </entry>\n";
     }
 
     $feedUrlXml = htmlspecialchars($feedUrl, ENT_XML1);
 
     return <<<XML
-    <?xml version="1.0" encoding="UTF-8"?>
-    <feed xmlns="http://www.w3.org/2005/Atom">
-      <id>{$feedUrlXml}</id>
-      <title>Duisburg – {$label}</title>
-      <link href="{$feedUrlXml}"/>
-      <updated>{$now}</updated>
-    {$entries}</feed>
-    XML;
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <id>{$feedUrlXml}</id>
+  <title>Duisburg – {$label}</title>
+  <link href="{$feedUrlXml}"/>
+  <updated>{$now}</updated>
+  {$entries}</feed>
+XML;
 }
 
 // --- Main ---
-
 $category = strtolower($_GET['category'] ?? '');
 
 if (!$category || !isset(CATEGORY_CONFIG[$category])) {
@@ -135,7 +246,7 @@ if (!$category || !isset(CATEGORY_CONFIG[$category])) {
 
 try {
     $results = fetchGraphQL(CATEGORY_CONFIG[$category]);
-    $atom    = toAtom($category, $results);
+    $atom = toAtom($category, $results);
     header('Content-Type: application/atom+xml; charset=utf-8');
     echo $atom;
 } catch (RuntimeException $e) {
