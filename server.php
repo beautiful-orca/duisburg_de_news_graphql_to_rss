@@ -500,7 +500,13 @@ register_shutdown_function(function () {
 
 $category = strtolower($_GET['category'] ?? '');
 
-if (!$category || !isset(CATEGORY_CONFIG[$category])) {
+// Fallback to 'alle_news' if no category is provided
+if (!$category) {
+    $category = 'alle_news';
+}
+
+// Check if the category is valid
+if (!isset(CATEGORY_CONFIG[$category])) {
     $available = implode(', ', array_keys(CATEGORY_CONFIG));
     sendPlainTextError(400, "Unknown category. Available: {$available}");
     exit;
