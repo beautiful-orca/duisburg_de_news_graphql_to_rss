@@ -65,7 +65,7 @@ const GQL_QUERY = 'query Search($searchInput: SearchInput!) {
 define('CACHE_DIR', sys_get_temp_dir() . '/duisburg_pressemeldungen_kategorien_cache');
 const CACHE_TTL_FEED    = 3300;    // 55 minutes
 const CACHE_TTL_SEARCH  = 3300;    // 55 minutes
-const CACHE_TTL_ARTICLE = 86400;  // 12 hours
+const CACHE_TTL_ARTICLE = 86400;  // 24 hours
 
 $noCache = isset($_GET['no-cache']) && $_GET['no-cache'] == '1';
 
