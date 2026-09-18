@@ -98,9 +98,9 @@ The project uses a **file-based cache** in the system temp directory (`/tmp/duis
 
 | Cache Type | TTL        | Purpose                       |
 | ---------- | ---------- | ----------------------------- |
-| Feed       | 15 minutes | Fully assembled Atom XML feed |
-| Search     | 15 minutes | Raw GraphQL search results    |
-| Article    | 12 hours   | Individual article bodies     |
+| Feed       | 60 minutes | Fully assembled Atom XML feed |
+| Search     | 60 minutes | Raw GraphQL search results    |
+| Article    | 24 hours   | Individual article bodies     |
 
 
 - **Bypass Cache**: Add `?no-cache=1` to the URL.

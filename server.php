@@ -63,9 +63,9 @@ const GQL_QUERY = 'query Search($searchInput: SearchInput!) {
 //   - ARTICLE: individual article bodies, which change far less often
 //              than the list of headlines.
 define('CACHE_DIR', sys_get_temp_dir() . '/duisburg_pressemeldungen_kategorien_cache');
-const CACHE_TTL_FEED    = 900;    // 15 minutes
-const CACHE_TTL_SEARCH  = 900;    // 15 minutes
-const CACHE_TTL_ARTICLE = 43200;  // 12 hours
+const CACHE_TTL_FEED    = 3600;    // 60 minutes
+const CACHE_TTL_SEARCH  = 3600;    // 60 minutes
+const CACHE_TTL_ARTICLE = 86400;  // 12 hours
 
 $noCache = isset($_GET['no-cache']) && $_GET['no-cache'] == '1';
 
