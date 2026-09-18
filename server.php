@@ -1,5 +1,5 @@
 <?php
-// Duisburg Kategorie → Atom Feed Adapter
+// Duisburg Pressemeldungen Kategorien - RSS Feed Adapter
 // Usage: GET /server.php?category=stadtentwicklung
 // Optional: ?no-cache=1 to bypass all caches for this request
 
@@ -41,7 +41,7 @@ const GQL_QUERY = 'query Search($searchInput: SearchInput!) {
 //              cached individually).
 //   - ARTICLE: individual article bodies, which change far less often
 //              than the list of headlines.
-define('CACHE_DIR', sys_get_temp_dir() . '/duisburg_kategorie_cache');
+define('CACHE_DIR', sys_get_temp_dir() . '/duisburg_pressemeldungen_kategorien_cache');
 const CACHE_TTL_FEED    = 900;    // 15 minutes
 const CACHE_TTL_SEARCH  = 900;    // 15 minutes
 const CACHE_TTL_ARTICLE = 43200;  // 12 hours
