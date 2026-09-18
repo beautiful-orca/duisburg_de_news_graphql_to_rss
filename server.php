@@ -29,10 +29,81 @@ const GQL_QUERY = 'query Search($searchInput: SearchInput!) {
   }
 }';
 
+// ---- Caching ----
+// File-based cache. Search results (the GraphQL call) get a short TTL since
+// they're a list of headlines that can change often. Individual article
+// bodies get a much longer TTL since published text rarely changes.
+// Cache lives in the system temp dir rather than the web root, so it works
+// regardless of web-root write permissions.
+define('CACHE_DIR', sys_get_temp_dir() . '/duisburg_kategorie_cache');
+const CACHE_TTL_SEARCH  = 900;    // 15 minutes
+const CACHE_TTL_ARTICLE = 43200;  // 12 hours
+// ?no-cache=1 bypasses reading the cache for this request (still refreshes it)
+$noCache = isset($_GET['no-cache']) && $_GET['no-cache'] == '1';
+
+function ensureCacheDir(): void {
+    if (!is_dir(CACHE_DIR)) {
+        @mkdir(CACHE_DIR, 0775, true);
+    }
+}
+
+function cacheFilePath(string $key): string {
+    return CACHE_DIR . '/' . $key . '.json';
+}
+
+function cacheGet(string $key, int $ttl) {
+    $file = cacheFilePath($key);
+    if (!is_file($file)) {
+        return null;
+    }
+    if (time() - filemtime($file) > $ttl) {
+        return null; // expired; caller will refetch and overwrite
+    }
+    $raw = @file_get_contents($file);
+    if ($raw === false) {
+        return null;
+    }
+    $decoded = json_decode($raw, true);
+    return $decoded === null ? null : $decoded;
+}
+
+function cacheSet(string $key, $value): void {
+    ensureCacheDir();
+    $file = cacheFilePath($key);
+    $tmp = $file . '.' . getmypid() . '.tmp';
+    if (@file_put_contents($tmp, json_encode($value)) !== false) {
+        @rename($tmp, $file); // avoids readers seeing a half-written file
+    } else {
+        @unlink($tmp);
+    }
+}
+
+function cacheKey(string $prefix, string $input): string {
+    return $prefix . '_' . sha1($input);
+}
+
+/**
+ * Opportunistically remove expired cache files.
+ * Runs on a small fraction of requests to keep overhead low.
+ */
+function cacheCleanup(int $maxAge): void {
+    if (!is_dir(CACHE_DIR)) {
+        return;
+    }
+    if (mt_rand(1, 100) > 5) {
+        return; // only run cleanup ~5% of the time
+    }
+    foreach (glob(CACHE_DIR . '/*.json') ?: [] as $file) {
+        if (time() - filemtime($file) > $maxAge) {
+            @unlink($file);
+        }
+    }
+}
+
 function cleanText(string $text): string {
     // Fix common encoding issues (fallback for UTF-8 misinterpretation)
     $text = str_replace(
-        ['Ã¤', 'Ã¶', 'Ã¼', 'Ã', 'Ã©', 'Ã¨', 'Ã', 'lÃ¤', 'lÃ¶', 'lÃ¼', 'LÃ¤', 'LÃ¶', 'LÃ¼', 'Ã¶', 'Ã¼', 'Ã¤'],
+        ['Ã¤', 'Ã¶', 'Ã¼', 'Ã', 'Ã©', 'Ã¨', 'Ã', 'lÃ¤', 'lÃ¶', 'lÃ¼', 'LÃ¤', 'LÃ¶', 'LÃ¼', 'Ã¶', 'Ã¼', 'Ã¤'],
         ['ä', 'ö', 'ü', 'Á', 'é', 'è', 'À', 'lä', 'lö', 'lü', 'Lä', 'Lö', 'Lü', 'ö', 'ü', 'ä'],
         $text
     );
@@ -99,6 +170,18 @@ function fetchGraphQL(array $config): array {
         ],
     ]);
 
+    global $noCache;
+
+    // Cache key is derived from the actual request payload, so if the
+    // filter/limit/sort ever changes, it naturally gets a fresh cache entry.
+    $key = cacheKey('search', $payload);
+    if (!$noCache) {
+        $cached = cacheGet($key, CACHE_TTL_SEARCH);
+        if ($cached !== null) {
+            return $cached;
+        }
+    }
+
     $ch = curl_init(GRAPHQL_URL);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -116,18 +199,41 @@ function fetchGraphQL(array $config): array {
     $error = curl_error($ch);
 
     if ($error) {
+        // Fall back to a stale cache entry (if any) rather than failing outright
+        $stale = cacheGet($key, PHP_INT_MAX);
+        if ($stale !== null) {
+            return $stale;
+        }
         throw new RuntimeException('cURL error: ' . $error);
     }
 
     $data = json_decode($response, true);
     if (!$data) {
+        $stale = cacheGet($key, PHP_INT_MAX);
+        if ($stale !== null) {
+            return $stale;
+        }
         throw new RuntimeException('JSON parse error');
     }
 
-    return $data['data']['search']['results'] ?? [];
+    $results = $data['data']['search']['results'] ?? [];
+    cacheSet($key, $results);
+    cacheCleanup(max(CACHE_TTL_SEARCH, CACHE_TTL_ARTICLE) * 3);
+
+    return $results;
 }
 
 function fetchArticleContent(string $url): string {
+    global $noCache;
+
+    $key = cacheKey('article', $url);
+    if (!$noCache) {
+        $cached = cacheGet($key, CACHE_TTL_ARTICLE);
+        if ($cached !== null) {
+            return $cached['content'] ?? '';
+        }
+    }
+
     $ch = curl_init($url);
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
@@ -142,6 +248,11 @@ function fetchArticleContent(string $url): string {
     $error = curl_error($ch);
 
     if ($error) {
+        // Fall back to a stale cache entry (if any) rather than failing outright
+        $stale = cacheGet($key, PHP_INT_MAX);
+        if ($stale !== null) {
+            return $stale['content'] ?? '';
+        }
         throw new RuntimeException("Failed to fetch article: $error");
     }
 
@@ -181,7 +292,10 @@ function fetchArticleContent(string $url): string {
         }
     }
 
-    return trim($content);
+    $content = trim($content);
+    cacheSet($key, ['content' => $content]);
+
+    return $content;
 }
 
 function toAtom(string $category, array $results): string {
